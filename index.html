@@ -1002,6 +1002,7 @@ let state = {
   questionOrder: [],
   wrongOnly: false,
   showNavigator: false,
+  noType: true,
 };
 
 function getFilteredQuestions() {
@@ -1087,9 +1088,13 @@ function render() {
     <span class="toggle-label">随机顺序</span>
     <div class="toggle-switch ${state.shuffleMode ? 'on' : ''}" onclick="toggleShuffle()"></div>
   </div>
-  <div class="toggle-row" style="margin-top:-8px;margin-bottom:16px;">
+  <div class="toggle-row" style="margin-top:-8px;">
     <span class="toggle-label">仅显示错题</span>
     <div class="toggle-switch ${state.wrongOnly ? 'on' : ''}" onclick="toggleWrongOnly()"></div>
+  </div>
+  <div class="toggle-row" style="margin-top:-8px;margin-bottom:16px;">
+    <span class="toggle-label">免打字（翻答案自评）</span>
+    <div class="toggle-switch ${state.noType ? 'on' : ''}" onclick="toggleNoType()"></div>
   </div>`;
 
   // Stats
@@ -1164,22 +1169,41 @@ function render() {
       </div>`;
     }
   } else if (q.type === 'fill') {
-    const val = state.fillInputs[q.id] || '';
-    let inputCls = 'fill-input';
-    if (answered) {
-      inputCls += state.answers[q.id] === true ? ' correct' : ' wrong';
-    }
-    html += `<div class="fill-input-wrap">
-      <input class="${inputCls}" type="text" placeholder="请输入答案..." value="${escAttr(val)}" 
-        ${answered ? 'disabled' : ''} oninput="updateFill('${q.id}', this.value)"
-        onkeydown="if(event.key==='Enter')submitFill('${q.id}')">
-      ${!answered ? '<div class="fill-hint">按 Enter 或点击确认提交答案</div>' : ''}
-    </div>`;
-
-    if (!answered) {
-      html += `<div class="action-row">
-        <button class="btn btn-primary" onclick="submitFill('${q.id}')">确认答案</button>
+    if (state.noType) {
+      const shown = answered || state.answers[q.id + '_shown'];
+      if (!shown) {
+        html += `<div class="action-row">
+          <button class="btn btn-primary" onclick="showRefAnswer('${q.id}')">显示答案</button>
+        </div>`;
+      } else {
+        html += `<div class="explanation show ${state.answers[q.id] === false ? 'wrong-exp' : 'correct-exp'}" style="display:block;">
+          <div class="exp-title">📌 得分点</div>
+          <div style="font-weight:700;font-size:15px;">${q.answer}</div>
+          <div style="white-space:pre-wrap;margin-top:10px;opacity:.9;">${srcText(q)}</div>
+        </div>`;
+        html += `<div class="action-row">
+          <button class="btn ${state.answers[q.id] === true ? 'btn-success' : 'btn-outline'}" style="flex:1;" onclick="markEssay('${q.id}', true)">掌握了</button>
+          <button class="btn" style="flex:1;background:var(--danger-bg);color:#991B1B;border:none;" onclick="markEssay('${q.id}', false)">还需复习</button>
+        </div>`;
+      }
+    } else {
+      const val = state.fillInputs[q.id] || '';
+      let inputCls = 'fill-input';
+      if (answered) {
+        inputCls += state.answers[q.id] === true ? ' correct' : ' wrong';
+      }
+      html += `<div class="fill-input-wrap">
+        <input class="${inputCls}" type="text" placeholder="请输入答案..." value="${escAttr(val)}" 
+          ${answered ? 'disabled' : ''} oninput="updateFill('${q.id}', this.value)"
+          onkeydown="if(event.key==='Enter')submitFill('${q.id}')">
+        ${!answered ? '<div class="fill-hint">按 Enter 或点击确认提交答案</div>' : ''}
       </div>`;
+
+      if (!answered) {
+        html += `<div class="action-row">
+          <button class="btn btn-primary" onclick="submitFill('${q.id}')">确认答案</button>
+        </div>`;
+      }
     }
   } else if (q.type === 'essay') {
     // Essay / 简答/综合题 - self-study mode
@@ -1211,7 +1235,7 @@ function render() {
   }
 
   // Explanation
-  if (answered && q.explanation) {
+  if (answered && q.explanation && !(state.noType && q.type === 'fill')) {
     const isCorrect = state.answers[q.id] === true;
     html += `<div class="explanation show ${isCorrect ? 'correct-exp' : 'wrong-exp'}">
       <div class="exp-title">${isCorrect ? '✅ 回答正确！' : '❌ 回答错误'}</div>
@@ -1322,6 +1346,11 @@ window.toggleWrongOnly = function() {
   render();
 };
 
+window.toggleNoType = function() {
+  state.noType = !state.noType;
+  render();
+};
+
 window.toggleNavigator = function() {
   state.showNavigator = !state.showNavigator;
   render();
@@ -1352,6 +1381,10 @@ function normalizeAnswer(s) {
 
 function escAttr(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function srcText(q) {
+  return (q.explanation || '').replace(/^得分点：[\s\S]*?\n\n考点原文：/, '');
 }
 
 window.submitFill = function(qid) {
