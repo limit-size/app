@@ -211,6 +211,12 @@
     margin-bottom: 18px;
     white-space: pre-wrap;
   }
+  .kw {
+    font-weight: 700;
+    color: #047857;
+    border-bottom: 2px solid #10B981;
+    padding-bottom: 1px;
+  }
 
   /* Options */
   .options-list {
@@ -531,24 +537,6 @@
   .essay-area:focus {
     border-color: var(--primary-light);
     box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
-  }
-  .ref-answer {
-    margin-top: 12px;
-    padding: 14px;
-    background: #F0F9FF;
-    border-left: 4px solid #0EA5E9;
-    border-radius: 8px;
-    font-size: 13px;
-    line-height: 1.7;
-    color: var(--gray-700);
-    display: none;
-    white-space: pre-wrap;
-  }
-  .ref-answer.show { display: block; }
-  .ref-answer-title {
-    font-weight: 700;
-    color: #0369A1;
-    margin-bottom: 6px;
   }
 </style>
 </head>
@@ -1093,7 +1081,7 @@ function render() {
     <div class="toggle-switch ${state.wrongOnly ? 'on' : ''}" onclick="toggleWrongOnly()"></div>
   </div>
   <div class="toggle-row" style="margin-top:-8px;margin-bottom:16px;">
-    <span class="toggle-label">免打字（翻答案自评）</span>
+    <span class="toggle-label">免打字（答案直接显示）</span>
     <div class="toggle-switch ${state.noType ? 'on' : ''}" onclick="toggleNoType()"></div>
   </div>`;
 
@@ -1139,9 +1127,9 @@ function render() {
     <span class="q-source">${q.source}</span>
   </div>`;
   html += `<div class="q-number">第 ${state.currentQ + 1} / ${qs.length} 题</div>`;
-  html += `<div class="q-text">${q.text}</div>`;
-
   const answered = state.answers[q.id] !== undefined;
+  const filled = state.noType && q.type === 'fill' ? filledText(q) : null;
+  html += `<div class="q-text">${filled || q.text}</div>`;
 
   if (q.type === 'choice') {
     const letters = ['A', 'B', 'C', 'D', 'E'];
@@ -1170,22 +1158,15 @@ function render() {
     }
   } else if (q.type === 'fill') {
     if (state.noType) {
-      const shown = answered || state.answers[q.id + '_shown'];
-      if (!shown) {
-        html += `<div class="action-row">
-          <button class="btn btn-primary" onclick="showRefAnswer('${q.id}')">显示答案</button>
-        </div>`;
-      } else {
-        html += `<div class="explanation show ${state.answers[q.id] === false ? 'wrong-exp' : 'correct-exp'}" style="display:block;">
-          <div class="exp-title">📌 得分点</div>
-          <div style="font-weight:700;font-size:15px;">${q.answer}</div>
-          <div style="white-space:pre-wrap;margin-top:10px;opacity:.9;">${srcText(q)}</div>
-        </div>`;
-        html += `<div class="action-row">
-          <button class="btn ${state.answers[q.id] === true ? 'btn-success' : 'btn-outline'}" style="flex:1;" onclick="markEssay('${q.id}', true)">掌握了</button>
-          <button class="btn" style="flex:1;background:var(--danger-bg);color:#991B1B;border:none;" onclick="markEssay('${q.id}', false)">还需复习</button>
-        </div>`;
-      }
+      html += `<div class="explanation show ${state.answers[q.id] === false ? 'wrong-exp' : 'correct-exp'}" style="display:block;">
+        <div class="exp-title">📌 得分点</div>
+        <div style="font-weight:700;font-size:15px;">${q.answer}</div>
+        <div style="white-space:pre-wrap;margin-top:10px;opacity:.95;">${revealText(q)}</div>
+      </div>`;
+      html += `<div class="action-row">
+        <button class="btn ${state.answers[q.id] === true ? 'btn-success' : 'btn-outline'}" style="flex:1;" onclick="markEssay('${q.id}', true)">掌握了</button>
+        <button class="btn" style="flex:1;background:var(--danger-bg);color:#991B1B;border:none;" onclick="markEssay('${q.id}', false)">还需复习</button>
+      </div>`;
     } else {
       const val = state.fillInputs[q.id] || '';
       let inputCls = 'fill-input';
@@ -1206,25 +1187,20 @@ function render() {
       }
     }
   } else if (q.type === 'essay') {
-    // Essay / 简答/综合题 - self-study mode
-    html += `<div class="ref-answer" id="ref-${q.id}" style="display:none;">
-      <div class="ref-answer-title">参考答案：</div>
-      <div>${q.refAnswer}</div>
-    </div>`;
-    if (!state.answers[q.id + '_shown']) {
+    const answerShown = state.noType || state.answers[q.id + '_shown'];
+    if (!answerShown) {
       html += `<div class="action-row">
         <button class="btn btn-primary" onclick="showRefAnswer('${q.id}')">显示参考答案</button>
       </div>`;
     } else {
-      html += `<div class="action-row">
-        <button class="btn btn-outline" onclick="hideRefAnswer('${q.id}')">收起答案</button>
-        <button class="btn btn-success" onclick="markEssay('${q.id}', true)" style="flex:1;">掌握了</button>
-        <button class="btn" style="flex:1;background:var(--danger-bg);color:#991B1B;border:none;" onclick="markEssay('${q.id}', false)">还需复习</button>
-      </div>`;
-      // Show the reference answer directly
-      html += `<div class="explanation show correct-exp" style="display:block;">
+      html += `<div class="explanation show ${state.answers[q.id] === false ? 'wrong-exp' : 'correct-exp'}" style="display:block;">
         <div class="exp-title">📖 参考答案</div>
         <div style="white-space:pre-wrap;">${q.refAnswer}</div>
+      </div>`;
+      html += `<div class="action-row">
+        ${state.noType ? '' : `<button class="btn btn-outline" onclick="hideRefAnswer('${q.id}')">收起答案</button>`}
+        <button class="btn btn-success" onclick="markEssay('${q.id}', true)" style="flex:1;">掌握了</button>
+        <button class="btn" style="flex:1;background:var(--danger-bg);color:#991B1B;border:none;" onclick="markEssay('${q.id}', false)">还需复习</button>
       </div>`;
       if (state.answers[q.id] === true) {
         html += `<div style="text-align:center;margin-top:8px;color:var(--success);font-weight:600;font-size:14px;">✅ 已标记为掌握</div>`;
@@ -1385,6 +1361,23 @@ function escAttr(s) {
 
 function srcText(q) {
   return (q.explanation || '').replace(/^得分点：[\s\S]*?\n\n考点原文：/, '');
+}
+
+function revealText(q) {
+  return srcText(q).replace(/【([^】]*)】/g, '<span class="kw">$1</span>');
+}
+
+function filledText(q) {
+  const blanks = (q.text.match(/______/g) || []).length;
+  if (!blanks) return null;
+  const parts = q.answer.split('、');
+  const mark = s => `<span class="kw">${s}</span>`;
+  if (parts.length === blanks) {
+    let i = 0;
+    return q.text.replace(/______/g, () => mark(parts[i++]));
+  }
+  if (blanks === 1) return q.text.replace('______', mark(q.answer));
+  return null;
 }
 
 window.submitFill = function(qid) {
